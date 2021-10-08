@@ -662,7 +662,7 @@ Resources:
             - SourceCode
             - General
             - TemplateKeyPrefix
-          - "/aws-content-analysis-video-workflow.template"
+          - "/aim-315-workflow.yaml"
       Parameters:
         WorkflowCustomResourceArn:
           Fn::GetAtt:

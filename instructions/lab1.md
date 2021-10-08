@@ -7,11 +7,22 @@
 
 # 2. Start a workflow for a video file
 
-`awscurl -X POST --data '{"Name":"'$WORKFLOW_NAME'", "Input":{"Media":{"Video":{"S3Bucket":"'$DATAPLANE_BUCKET'","S3Key":"upload/the_lucy_show_ring_a_ding_ding_tools.mp4"}}}}' $WORKFLOW_API_ENDPOINT\workflow/execution`
+`awscurl -X POST --data '{"Name":"'$WORKFLOW_NAME'", "Input":{"Media":{"Video":{"S3Bucket":"'$DATAPLANE_BUCKET'","S3Key":"upload/the_lucy_show_ring_a_ding_ding_tools.mp4"}}}}' $WORKFLOW_API_ENDPOINT\workflow/execution | jq . | tee startWorkflow1.json`
 
-# 3. Grab Asset ID from output and export it as an env variable
+# 3. Store Asset ID and WorkflowID from output and export them as env variables
 
-`export ASSETID=''`
+`export ASSET_ID=$(jq -r '.AssetId' startWorkflow1.json)`
+`export WORKFLOW_ID=$(jq -r '.Id' startWorkflow1.json)`
+
+
+# Check Workflow Status
+`awscurl -X GET $WORKFLOW_API_ENDPOINT\workflow/execution/$WORKFLOW_ID | jq '.[].Status'`
+
+You can continually check the status in your IDE with this command:
+
+`while [ "$WORKFLOW_STATUS" != 'Complete' ]; do sleep 10; export WORKFLOW_STATUS=$(awscurl -X GET $WORKFLOW_API_ENDPOINT\workflow/execution/$WORKFLOW_ID | jq '.[].Status'); echo $WORKFLOW_STATUS ; done`
+
+You can visually check the status of the workflow from the stepfunctions console: https://console.aws.amazon.com/states/home?region=us-east-1#/statemachines
 
 # 4. Explore extracted metadata through an API call
 
