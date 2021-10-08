@@ -1,0 +1,699 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AIM315 Workshop Template
+
+Mappings:
+
+  MediaInsightsEngine:
+    Release:
+      Version: "v2.0.5"
+  
+  SourceCode:
+    General:
+      S3Bucket: "ee-assets-prod-us-east-1"
+      CodeKeyPrefix: "modules/4b1fcee0c2044de3921c99723d9498f9/v1/code"
+      TemplateKeyPrefix: "modules/4b1fcee0c2044de3921c99723d9498f9/v1/cf"
+
+Resources:
+  # Deploy MIE Framework
+
+  MieStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Join
+        - ""
+        - - "https://"
+          - "rodeolabz-"
+          - !Ref AWS::Region
+          - ".s3."
+          - !Ref AWS::Region
+          - ".amazonaws.com/"
+          - "aws-media-insights-engine/"
+          - !FindInMap
+            - MediaInsightsEngine
+            - Release
+            - Version
+          - "/media-insights-stack.template"
+      Parameters:
+        DeployAnalyticsPipeline: Yes
+        DeployTestResources: No
+        MaxConcurrentWorkflows: 5
+        EnableXrayTrace: Yes
+  # C9 
+
+  C9IDE:
+    Type: 'AWS::Cloud9::EnvironmentEC2'
+    DependsOn: PublicSubnet1RouteTableAssociation
+    Properties:
+      Name: AIM315-Workshop
+      Description: C9 IDE for AIM315 Workshop
+      Repositories:
+          - PathComponent: /aim315-workshop
+            RepositoryUrl: https://github.com/brandold/aim315workshop.git
+      AutomaticStopTimeMinutes: 60
+      SubnetId: !Ref PublicSubnet1
+      InstanceType: t2.micro
+
+  # Deploy Kendra
+
+  KendraIndex:
+    Type: AWS::Kendra::Index
+    Properties: 
+      Description: AIM315 Workshop
+      Edition: DEVELOPER_EDITION
+      Name: aim315index
+      RoleArn: !GetAtt KendraRole.Arn
+
+
+  # Deploy Elasticsearch
+
+  ESDomain:
+    Type: "AWS::Elasticsearch::Domain"
+    Properties:
+      EBSOptions:
+        EBSEnabled: true
+        Iops: 0
+        VolumeSize: 10
+        VolumeType: gp2
+      ElasticsearchClusterConfig:
+        DedicatedMasterEnabled: false
+        InstanceCount: 2
+        ZoneAwarenessEnabled: false
+        InstanceType: t2.small.elasticsearch
+      ElasticsearchVersion: 6.3
+      SnapshotOptions:
+        AutomatedSnapshotStartHour: 0
+      AccessPolicies:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'es:*'
+            Condition:
+              IpAddress:
+                'aws:SourceIp':
+                  - !Ref NginxElasticIP
+  
+  # Deploy NGINX EC2 instance
+
+  NginxInstance:
+    Type: 'AWS::EC2::Instance'
+    DependsOn:
+      - InternetGateway
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    Properties:
+      ImageId: ami-087c17d1fe0178315
+      IamInstanceProfile: !Ref NginxInstanceProfile
+      InstanceType: t2.small
+      NetworkInterfaces:
+          - AssociatePublicIpAddress: 'true'
+            DeleteOnTermination: 'true'
+            DeviceIndex: '0'
+            GroupSet: 
+              - !GetAtt NginxInstanceSG.GroupId
+            SubnetId: !Ref PublicSubnet1
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          yum update -y
+          yum install -y aws-cfn-bootstrap cloud-init aws-cli
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource NginxInstance --region ${AWS::Region} --configsets ec2_setup
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource NginxInstance --region ${AWS::Region}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          ec2_setup:
+            - config_cfn
+            - install_packages
+            - config_nginx
+            # - create_cert
+            - start_services
+        config_cfn:
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.NginxInstance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource NginxInstance --region ${AWS::Region} --configsets ec2_setup
+                runas=root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        install_packages:
+          commands:
+            01_install_nginx:
+              command: "amazon-linux-extras install -y nginx1"
+        config_nginx:
+          files:
+            "/etc/nginx/nginx.conf":
+              content: !Sub |
+                worker_processes  auto;
+
+                events {
+                    worker_connections  1024;
+                }
+
+                http {
+                    # ssl_session_cache shared:SSL:10m;
+                    # ssl_session_timeout 10m;
+                    sendfile on;
+                    tcp_nopush on;
+                    tcp_nodelay on;
+                    keepalive_timeout 65;
+                    types_hash_max_size 2048;
+                    server_names_hash_bucket_size 128;
+                    include /etc/nginx/mime.types;
+                    default_type application/octet-stream;
+                    gzip on;
+                    gzip_disable "msie6";
+                  
+
+
+                  server {
+                    listen       80;
+
+                    location / {
+                      proxy_http_version 1.1;
+                      proxy_set_header Host https://${ESDomain.DomainEndpoint};
+                      proxy_set_header Connection "Keep-Alive";
+                      proxy_set_header Proxy-Connection "Keep-Alive";
+                      proxy_pass https://${ESDomain.DomainEndpoint}/_plugin/kibana/;
+                      proxy_set_header X-Real-IP ${NginxElasticIP};
+                    }
+
+                    location ~ (/_plugin/kibana|/app/kibana|/app/timelion|/bundles|/es_admin|/plugins|/api|/ui|/elasticsearch) {
+                      proxy_pass              https://${ESDomain.DomainEndpoint};
+                      proxy_set_header        X-Real-IP ${NginxElasticIP};
+                    }
+                  }
+                }
+        create_cert:
+          commands:
+            01_mkdir_ssl: 
+              command: mkdir /etc/nginx/ssl
+            02_ch_dir:
+              command: cd /etc/nginx/ssl
+            03_genrsa:
+              command: openssl genrsa -out nginx.key 2048
+            04_req_crt:
+              command: openssl req -new -key nginx.key -out nginx.csr -subj "/C=XX/ST=XX/L=nginx/O=nginx/CN=nginx"
+            05_x509:
+              command: openssl x509 -req -days 365 -in nginx.csr -signkey nginx.key -out nginx.crt
+            06_pem:
+              command: cat nginx.key nginx.crt | tee nginx.pem
+        start_services:
+          commands:
+            01_start_nginx:
+              command: "systemctl restart nginx"
+            02_onboot_nginx:
+              command: "systemctl enable nginx"
+  
+  # elastic search consumer lambda
+
+  ElasticsearchConsumerLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "lambda_handler.lambda_handler"
+      Role: !GetAtt ConsumerRole.Arn
+      Code:
+        S3Bucket: !FindInMap ["SourceCode", "General", "S3Bucket"]
+        S3Key:
+          !Join [
+            "/",
+            [
+              !FindInMap ["SourceCode", "General", "CodeKeyPrefix"],
+              "esconsumer.zip",
+            ],
+          ]
+      Runtime: "python3.7"
+      Timeout: 900
+      MemorySize: 2048
+      Environment:
+        Variables:
+          EsEndpoint: !GetAtt ESDomain.DomainEndpoint
+          DataplaneBucket: !GetAtt MieStack.Outputs.DataplaneBucket
+
+  # kendra consumer lambda
+
+  KendraConsumerLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "lambda_handler.lambda_handler"
+      Role: !GetAtt ConsumerRole.Arn
+      Code:
+        S3Bucket: !FindInMap ["SourceCode", "General", "S3Bucket"]
+        S3Key:
+          !Join [
+            "/",
+            [
+              !FindInMap ["SourceCode", "General", "CodeKeyPrefix"],
+              "kendraconsumer.zip",
+            ],
+          ]
+      Runtime: "python3.7"
+      Timeout: 900
+      MemorySize: 2048
+      Environment:
+        Variables:
+          KendraIndex: !GetAtt ESDomain.DomainEndpoint
+          DataplaneBucket: !GetAtt MieStack.Outputs.DataplaneBucket
+          DataplaneHandlerArn: !GetAtt MieStack.Outputs.DataPlaneHandlerArn
+
+  # IAM
+
+  ConsumerRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${AWS::StackName}-ElasticKinesisAccessPolicy"
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "kinesis:DescribeStream"
+                  - "kinesis:GetShardIterator"
+                  - "kinesis:GetRecords"
+                Resource: !GetAtt MieStack.Outputs.AnalyticsStreamArn
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "kendra:BatchPutDocument"
+                  - "lambda:InvokeFunction"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "es:ESHttpPost"
+                  - "es:ESHttpPut"
+                  - "es:ESHttpDelete"
+                  - "es:ESHttpGet"
+                Resource: !Join ["", [!GetAtt ESDomain.DomainArn, "/*"]]
+              - Effect: Allow
+                Action:
+                  - "es:DescribeElasticsearchDomain"
+                  - "es:GetCompatibleElasticsearchVersions"
+                  - "es:DescribeElasticsearchDomains"
+                Resource: !GetAtt ESDomain.DomainArn
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: !Sub "arn:aws:s3:::${MieStack.Outputs.DataplaneBucket}/*"
+
+  C9Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+    
+  KendraRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - kendra.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  
+  NginxGatewayRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+        Version: 2012-10-17
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'es:*'
+                Resource: '*'
+            Version: 2012-10-17
+          PolicyName: NginxGateway-policy
+
+  RolePolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AIM315InstancePolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:DescribeLogStreams'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+              - 'lambda:CreateFunction'
+              - 'lambda:TagResource'
+              - 'iam:ListRoleTags'
+              - 'iam:ListServerCertificates'
+              - 'iam:CreateRole'
+              - 'lambda:GetFunctionConfiguration'
+              - 'iam:AttachRolePolicy'
+              - 'iam:ListServiceSpecificCredentials'
+              - 'iam:PutRolePolicy'
+              - 'iam:ListSigningCertificates'
+              - 'iam:ListVirtualMFADevices'
+              - 'iam:ListSSHPublicKeys'
+              - 'iam:ListAttachedRolePolicies'
+              - 'lambda:ListLayerVersions'
+              - 'lambda:ListLayers'
+              - 'lambda:DeleteFunction'
+              - 'lambda:GetAlias'
+              - 'iam:ListRolePolicies'
+              - 'iam:ListPolicies'
+              - 'iam:GetRole'
+              - 'lambda:ListFunctions'
+              - 'iam:ListSAMLProviders'
+              - 'iam:GetPolicy'
+              - 'lambda:GetEventSourceMapping'
+              - 'apigateway:*'
+              - 'lambda:ListAliases'
+              - 'iam:ListEntitiesForPolicy'
+              - 'iam:AttachUserPolicy'
+              - 'iam:DeleteRole'
+              - 'lambda:AddLayerVersionPermission'
+              - 'lambda:UpdateAlias'
+              - 'lambda:UpdateFunctionCode'
+              - 'iam:ListGroupsForUser'
+              - 'lambda:ListEventSourceMappings'
+              - 'lambda:PublishVersion'
+              - 'lambda:CreateAlias'
+              - 'iam:GetAccountSummary'
+              - 'lambda:ListVersionsByFunction'
+              - 'lambda:GetLayerVersion'
+              - 'iam:ListPoliciesGrantingServiceAccess'
+              - 'iam:DeletePolicy'
+              - 'lambda:GetAccountSettings'
+              - 'iam:ListMFADevices'
+              - 'lambda:GetLayerVersionPolicy'
+              - 'lambda:UntagResource'
+              - 'lambda:PutFunctionConcurrency'
+              - 'iam:ListInstanceProfilesForRole'
+              - 'iam:PassRole'
+              - 'lambda:ListTags'
+              - 'iam:DeleteRolePolicy'
+              - 'lambda:DeleteLayerVersion'
+              - 'iam:ListAttachedUserPolicies'
+              - 'iam:ListAttachedGroupPolicies'
+              - 'iam:ListAccessKeys'
+              - 'lambda:UpdateEventSourceMapping'
+              - 'lambda:GetFunction'
+              - 'iam:ListGroupPolicies'
+              - 'lambda:UpdateFunctionConfiguration'
+              - 'iam:ListRoles'
+              - 'iam:ListUserPolicies'
+              - 'iam:ListInstanceProfiles'
+              - 'iam:CreatePolicy'
+              - 'lambda:AddPermission'
+              - 'iam:ListPolicyVersions'
+              - 'iam:ListOpenIDConnectProviders'
+              - 'iam:PutUserPolicy'
+              - 'iam:ListAccountAliases'
+              - 'iam:ListUsers'
+              - 'iam:UpdateRole'
+              - 'lambda:DeleteFunctionConcurrency'
+              - 'iam:ListGroups'
+              - 'lambda:GetPolicy'
+              - 'iam:GetLoginProfile'
+              - 'iam:DeletePolicyVersion'
+              - 'iam:ListUserTags'
+              - 's3:*'
+              - 'execute-api:*'
+            Resource: '*'
+      Roles:
+        - Ref: C9Role
+        - Ref: KendraRole
+  
+  C9InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: AIM315WorkshopInstanceProfile
+      Path: /
+      Roles:
+        - Ref: C9Role
+
+  NginxInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    DependsOn:
+      - NginxGatewayRole
+    Properties:
+      Roles:
+        - !Ref NginxGatewayRole
+      Path: /
+
+
+  # Networking
+
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.192.0.0/16
+      Tags:
+        - Key: Name
+          Value: AIM315 VPC
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AIM315 IGW
+
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  
+  PublicSubnet1:
+    DependsOn: VPC
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1a
+      CidrBlock: 10.192.10.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: AIM315 Public Subnet 1
+  
+  PublicSubnet2:
+    DependsOn: VPC
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1b
+      CidrBlock: 10.192.11.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: AIM315 Public Subnet 2
+  
+  PublicSubnet3:
+    DependsOn: VPC
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1c
+      CidrBlock: 10.192.12.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: AIM315 Public Subnet 3
+  
+  PublicSubnet4:
+    DependsOn: VPC
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1d
+      CidrBlock: 10.192.13.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: AIM315 Public Subnet 4
+  
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: AIM315 Public Routes
+  
+  DefaultPublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+  
+  PublicSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+  
+  PublicSubnet3RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet3
+  
+  PublicSubnet4RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet4
+  
+  SGIngressRuleHTTPS:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt NginxInstanceSG.GroupId
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: 0.0.0.0/0
+
+  SGIngressRuleHTTP:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt NginxInstanceSG.GroupId
+      IpProtocol: tcp
+      FromPort: '80'
+      ToPort: '80'
+      CidrIp: 0.0.0.0/0
+  
+  SGIngressRuleSSH:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      GroupId: !GetAtt NginxInstanceSG.GroupId
+      IpProtocol: tcp
+      FromPort: '22'
+      ToPort: '22'
+      CidrIp: 0.0.0.0/0
+
+  NginxElasticIP:
+    Type: 'AWS::EC2::EIP'
+
+  NginxElasticIpAssoc:
+    Type: AWS::EC2::EIPAssociation
+    Properties: 
+      AllocationId: !GetAtt NginxElasticIP.AllocationId
+      InstanceId: !Ref NginxInstance
+
+  NginxInstanceSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security Group for Nginx Reverse Proxy Instance
+      VpcId: !Ref VPC
+
+
+  # Deploy video workflow
+
+  CompleteVideoWorkflow:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Join
+        - ""
+        - - "https://"
+          - !FindInMap
+            - SourceCode
+            - General
+            - S3Bucket
+          - ".s3."
+          - !Ref AWS::Region
+          - ".amazonaws.com/"
+          - !FindInMap
+            - SourceCode
+            - General
+            - TemplateKeyPrefix
+          - "/aws-content-analysis-video-workflow.template"
+      Parameters:
+        WorkflowCustomResourceArn:
+          Fn::GetAtt:
+            - MieStack
+            - Outputs.WorkflowCustomResourceArn
+        OperatorLibraryStack:
+          Fn::GetAtt:
+            - MieStack
+            - Outputs.OperatorLibraryStack
+
+Outputs:
+  WorkflowApiEndpoint:
+    Description: Endpoint for workflow Creation, Execution and Monitoring API
+    Value: !GetAtt MieStack.Outputs.WorkflowApiEndpoint
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", WorkflowApiEndpoint]]
+  
+  DataplaneApiEndpoint:
+    Description: Endpoint for data persisitence API
+    Value: !GetAtt MieStack.Outputs.DataplaneApiEndpoint
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", DataplaneApiEndpoint]]
+
+  DataplaneBucket:
+    Description: Bucket used to store transfomred media object from workflow execution
+    Value: !GetAtt MieStack.Outputs.DataplaneBucket
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", DataplaneBucket]]
+  
+  KibanaIP:
+    Description: IP of the nginx proxy for kibana
+    Value: !Ref NginxElasticIP
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", KibanaIP]]
