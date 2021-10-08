@@ -271,7 +271,7 @@ Resources:
       MemorySize: 2048
       Environment:
         Variables:
-          KendraIndex: !GetAtt ESDomain.DomainEndpoint
+          KendraIndex: !Ref KendraIndex
           DataplaneBucket: !GetAtt MieStack.Outputs.DataplaneBucket
           DataplaneHandlerArn: !GetAtt MieStack.Outputs.DataPlaneHandlerArn
 
