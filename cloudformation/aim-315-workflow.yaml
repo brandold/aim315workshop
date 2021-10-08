@@ -62,10 +62,6 @@ Resources:
       Operations:
         - Fn::ImportValue:
             Fn::Sub: "${OperatorLibraryStack}:Translate"
-        - Fn::ImportValue:
-            Fn::Sub: "${OperatorLibraryStack}:ComprehendPhrases"
-        - Fn::ImportValue:
-            Fn::Sub: "${OperatorLibraryStack}:ComprehendEntities"
 
   CasVideoWorkflow:
     DependsOn:
