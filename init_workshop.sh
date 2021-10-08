@@ -1,5 +1,5 @@
-yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-yum install jq -y
+sudo yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+sudo yum install jq -y
 export AWS_DEFAULT_REGION='us-east-1'
 export C9_EC2_ID=`aws ec2 describe-instances --region us-east-1 --filters Name=tag-key,Values='aws:cloud9:environment' Name=instance-state-name,Values='running' --query "Reservations[*].Instances[*].InstanceId" --output text`
 aws ec2 associate-iam-instance-profile --iam-instance-profile Name=AIM315WorkshopInstanceProfile --region us-east-1 --instance-id $C9_EC2_ID
