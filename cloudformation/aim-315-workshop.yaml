@@ -5,7 +5,7 @@ Mappings:
 
   MediaInsightsEngine:
     Release:
-      Version: "latest"
+      Version: "v3.0.5-ws"
   
   SourceCode:
     General:
@@ -22,9 +22,11 @@ Resources:
       TemplateURL: !Join
         - ""
         - - "https://"
-          - "solutions-reference"
+          - "rodeolabz-"
+          - !Ref AWS::Region
           - ".s3."
-          - "amazonaws.com/"
+          - !Ref AWS::Region
+          - ".amazonaws.com/"
           - "aws-media-insights-engine/"
           - !FindInMap
             - MediaInsightsEngine
