@@ -5,7 +5,7 @@ Mappings:
 
   MediaInsightsEngine:
     Release:
-      Version: "v3.0.3"
+      Version: "latest"
   
   SourceCode:
     General:
@@ -22,11 +22,9 @@ Resources:
       TemplateURL: !Join
         - ""
         - - "https://"
-          - "mie-dev-"
-          - !Ref AWS::Region
+          - "solutions-reference"
           - ".s3."
-          - !Ref AWS::Region
-          - ".amazonaws.com/"
+          - "amazonaws.com/"
           - "aws-media-insights-engine/"
           - !FindInMap
             - MediaInsightsEngine
