@@ -1,7 +1,8 @@
 <template>
   <div id="app">
-    <b-navbar fixed="top" type="dark" variant="danger">
-      <b-navbar-brand href="/">SearchFlix</b-navbar-brand>
+  <br>
+    <b-navbar id="navbar" fixed="top">
+      <b-navbar-brand id="brand" href="/">SearchFlix</b-navbar-brand>
     </b-navbar>
     <br>
     <router-view/>
@@ -22,6 +23,16 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
+  /* margin-top: 60px; */
 }
+
+#brand {
+  padding-left: 10px;
+  color: #31255D;
+}
+
+#navbar {
+  background-color: #99D7F7;
+}
+
 </style>

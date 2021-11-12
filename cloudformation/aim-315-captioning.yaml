@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AIM315 Captioning Workflow"
+
+Parameters:
+  WorkflowCustomResourceArn:
+    Type: String
+    Description: "ARN of the Media Insights custom resource that handles creating operations, stages and workflows"
+  OperatorLibraryStack:
+    Description: "Name of the MIE operator library stack"
+    Type: String
+
+Resources:
+  TranslateStage:
+    Type: Custom::CustomResource
+    Properties:
+      ServiceToken: !Ref WorkflowCustomResourceArn
+      ResourceType: "Stage"
+      Name: "TranslateCaptionsStage"
+      Operations:
+        - Fn::ImportValue:
+            Fn::Sub: "${OperatorLibraryStack}:TranslateCaptions"
+  TranscribeStage:
+    Type: Custom::CustomResource
+    Properties:
+      ServiceToken: !Ref WorkflowCustomResourceArn
+      ResourceType: "Stage"
+      Name: "TranscribeStage"
+      Operations:
+        - Fn::ImportValue:
+            Fn::Sub: "${OperatorLibraryStack}:TranscribeVideo"
+
+  ContentLocalizationWorkflow:
+    DependsOn:
+      - TranscribeStage
+      - TranslateStage
+    Type: Custom::CustomResource
+    Properties:
+      ServiceToken: !Ref WorkflowCustomResourceArn
+      ResourceType: "Workflow"
+      Name: "ContentLocalizationWorkflow"
+      StartAt: !GetAtt TranscribeStage.Name
+      Stages: !Sub
+        - |-
+          {
+            "${TranscribeStage}":{
+              "Next": "${TranslateStage}"
+              },
+            "${TranslateStage}":{
+              "End": true
+              }
+          }
+        - {
+          TranscribeStage: !GetAtt TranscribeStage.Name,
+          TranslateStage: !GetAtt TranslateStage.Name,
+        }

@@ -593,6 +593,37 @@ Resources:
             - MieStack
             - Outputs.OperatorLibraryStack
 
+  # Deploy Captioning workflow
+
+  CaptioningWorkflow:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL: !Join
+        - ""
+        - - "https://"
+          - !FindInMap
+            - SourceCode
+            - General
+            - S3Bucket
+          - ".s3."
+          - !Ref AWS::Region
+          - ".amazonaws.com/"
+          - !FindInMap
+            - SourceCode
+            - General
+            - TemplateKeyPrefix
+          - "/aim-315-captioning.yaml"
+      Parameters:
+        WorkflowCustomResourceArn:
+          Fn::GetAtt:
+            - MieStack
+            - Outputs.WorkflowCustomResourceArn
+        OperatorLibraryStack:
+          Fn::GetAtt:
+            - MieStack
+            - Outputs.OperatorLibraryStack
+
+
 Outputs:
   WorkflowApiEndpoint:
     Description: Endpoint for workflow Creation, Execution and Monitoring API
