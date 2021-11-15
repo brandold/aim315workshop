@@ -93,6 +93,14 @@ Resources:
               IpAddress:
                 'aws:SourceIp':
                   - !Ref NginxElasticIP
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'es:*'
+            Condition:
+              IpAddress:
+                'aws:SourceIp':
+                  - 10.192.10.0/24
   
   # Deploy NGINX EC2 instance
 
@@ -630,12 +638,24 @@ Outputs:
     Value: !GetAtt MieStack.Outputs.WorkflowApiEndpoint
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", WorkflowApiEndpoint]]
+
+  WorkflowApiName:
+    Description: Name of the workflow Creation, Execution and Monitoring API
+    Value: !GetAtt MieStack.Outputs.WorkflowApiHandlerName
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", WorkflowApiHandlerName]]
   
   DataplaneApiEndpoint:
     Description: Endpoint for data persisitence API
     Value: !GetAtt MieStack.Outputs.DataplaneApiEndpoint
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", DataplaneApiEndpoint]]
+
+  DataplaneApiName:
+    Description: Name for data persisitence API
+    Value: !GetAtt MieStack.Outputs.DataPlaneApiHandlerName
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", DataPlaneApiHandlerName]]
 
   DataplaneBucket:
     Description: Bucket used to store transfomred media object from workflow execution
@@ -648,3 +668,16 @@ Outputs:
     Value: !Ref NginxElasticIP
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", KibanaIP]]
+
+  MediaInsightsEnginePython38Layer:
+    Description: Lambda layer for Python libraries
+    Value: !GetAtt MieStack.Outputs.MediaInsightsEnginePython38Layer
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", MediaInsightsEnginePython38Layer]]
+  
+  WorkflowCustomResourceArn:
+    Description: Custom resource for creating operations, stages and workflows using CloudFormation
+    Value: !GetAtt MieStack.Outputs.WorkflowCustomResourceArn
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", WorkflowCustomResourceArn]]
