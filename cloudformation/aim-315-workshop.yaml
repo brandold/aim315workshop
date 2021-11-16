@@ -10,8 +10,8 @@ Mappings:
   SourceCode:
     General:
       S3Bucket: "ee-assets-prod-us-east-1"
-      CodeKeyPrefix: "modules/4b1fcee0c2044de3921c99723d9498f9/v1/code"
-      TemplateKeyPrefix: "modules/4b1fcee0c2044de3921c99723d9498f9/v1/cf"
+      CodeKeyPrefix: "modules/b1d611e21aff47309d68ac4cd5687c55/v1/code"
+      TemplateKeyPrefix: "modules/b1d611e21aff47309d68ac4cd5687c55/v1/cf"
 
 Resources:
   # Deploy MIE Framework
