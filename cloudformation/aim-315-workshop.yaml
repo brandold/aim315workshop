@@ -692,3 +692,10 @@ Outputs:
     Value: !GetAtt MieStack.Outputs.WorkflowCustomResourceArn
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", WorkflowCustomResourceArn]]
+  
+  StackName:
+    Description: Name of this stack
+    Value: !Ref "AWS::StackName"
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", STACK_NAME_AIM315]]
