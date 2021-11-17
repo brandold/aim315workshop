@@ -6,7 +6,7 @@ export STACK_NAME=$(aws cloudformation list-exports | jq -r -c '.Exports[] | sel
 export C9_EC2_ID=`aws ec2 describe-instances --region us-east-1 --filters Name=tag-key,Values='aws:cloud9:environment' Name=instance-state-name,Values='running' --query "Reservations[*].Instances[*].InstanceId" --output text`
 aws ec2 associate-iam-instance-profile --iam-instance-profile Name=AIM315WorkshopInstanceProfile --region us-east-1 --instance-id $C9_EC2_ID
 # Set Nginx EIP variable
-export KIBANA_IP=$(aws cloudformation list-exports --query "Exports[?Name==\`$STACK_NAME\`].Value" --no-paginate --output text)
+export KIBANA_IP=$(aws cloudformation list-exports --query "Exports[?Name==\`$STACK_NAME:KibanaIP\`].Value" --no-paginate --output text)
 # Set dataplane variable
 export DATAPLANE_API_ENDPOINT=$(aws cloudformation list-exports --query "Exports[?Name==\`$STACK_NAME:DataplaneApiEndpoint\`].Value" --no-paginate --output text)
 export DATAPLANE_API_NAME=$(aws cloudformation list-exports --query "Exports[?Name==\`$STACK_NAME:DataPlaneApiHandlerName\`].Value" --no-paginate --output text)
