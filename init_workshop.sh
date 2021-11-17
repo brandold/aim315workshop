@@ -20,8 +20,8 @@ export MIE_LAYER=$(aws cloudformation list-exports --query "Exports[?Name==\`$ST
 # Set custom resource variable
 export CUSTOM_RESOURCE=$(aws cloudformation list-exports --query "Exports[?Name==\`$STACK_NAME:WorkflowCustomResourceArn\`].Value" --no-paginate --output text)
 virtualenv aim315-workshop -p $(which python3)
-source aim315-workshop/bin/activate
-cd aim315-workshop
+source ~/environment/aim315-workshop/bin/activate
+cd ~/environment/aim315-workshop/
 pip install botocore
 pip install awscurl
 pip install aws-sam-cli
