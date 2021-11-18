@@ -25,7 +25,7 @@ export default {
             "fileName": "the_lucy_show_john_wayne.mp4"
         },
         {
-            "title": "I Love Lucy, Ring a ding ding!",
+            "title": "I Love Lucy, Ring a ding!",
             "fileName": "the_lucy_show_ring_a_ding_ding_tools.mp4"
         },
         {
@@ -33,8 +33,8 @@ export default {
             "fileName": "grand_tour_vehicle.mp4"
         },
         {
-            "title": "The Grand Tour",
-            "fileName": "grand_tour_vehicle.mp4"
+            "title": "I Love Lucy, French Movie",
+            "fileName": "the_lucy_show_french_movie_star.mp4"
         },
         {
             "title": "Tears of Steel 1",
