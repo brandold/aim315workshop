@@ -4,7 +4,7 @@
         <b-img src="../public/../search_flix.png" fluid alt="Responsive image"></b-img>
         <br>
         <div v-for="item in content" v-bind:key="item.title" class="rows">
-          <b-card @click="openVideo(item)" v-bind:title="item.title" img-src="https://upload.wikimedia.org/wikipedia/commons/b/be/I_Love_Lucy_title.svg" img-alt="Image" img-top>
+          <b-card @click="openVideo(item)" v-bind:title="item.title" v-bind:img-src="item.img" img-alt="Image" img-top>
             <!-- <b-card-text>
             </b-card-text> -->
             </b-card>
@@ -21,24 +21,34 @@ export default {
     return {
       content: [
         {
-            "title": "I Love Lucy, John Wayne",
-            "fileName": "the_lucy_show_john_wayne.mp4"
+            "title": "John Wayne",
+            "fileName": "the_lucy_show_john_wayne.mp4",
+            "img": "../../ilovelucy.png"
         },
         {
-            "title": "I Love Lucy, Ring a ding!",
-            "fileName": "the_lucy_show_ring_a_ding_ding_tools.mp4"
+            "title": "Ring a ding!",
+            "fileName": "the_lucy_show_ring_a_ding_ding_tools.mp4",
+            "img": "../../ilovelucy.png"
         },
         {
             "title": "The Grand Tour",
-            "fileName": "grand_tour_vehicle.mp4"
+            "fileName": "grand_tour_vehicle.mp4",
+            "img": "../../grandtour.png"
         },
         {
-            "title": "I Love Lucy, French Movie",
-            "fileName": "the_lucy_show_french_movie_star.mp4"
+            "title": "French Movie Star",
+            "fileName": "the_lucy_show_french_movie_star.mp4",
+            "img": "../../ilovelucy.png"
         },
         {
-            "title": "Tears of Steel 1",
-            "fileName": "tos_violence_weapon_1_15.mp4"
+            "title": "Yellowstone Tips",
+            "fileName": "yellowstone.mp4",
+            "img": "../../yellowstone.png"
+        },
+        {
+            "title": "Fight Flu",
+            "fileName": "fightflu.mp4",
+            "img": "../../fightflu.png"
         }
       ]
     }
@@ -59,6 +69,7 @@ export default {
   display: inline-block;
   border: 1px solid silver;
   width: 30%;
+  height: 30%;
   margin: 2px;
 }
 </style>
