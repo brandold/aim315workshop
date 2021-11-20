@@ -49,7 +49,13 @@ export default {
             "title": "Fight Flu",
             "fileName": "fightflu.mp4",
             "img": "../../fightflu.png"
+        },
+        {
+            "title": "Vanlife",
+            "fileName": "VanlifeAcoustic.mp4",
+            "img": "../../VanlifeAcoustic.png"
         }
+
       ]
     }
   },
