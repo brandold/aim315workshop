@@ -31,11 +31,6 @@ export default {
             "img": "../../ilovelucy.png"
         },
         {
-            "title": "The Grand Tour",
-            "fileName": "grand_tour_vehicle.mp4",
-            "img": "../../grandtour.png"
-        },
-        {
             "title": "French Movie Star",
             "fileName": "the_lucy_show_french_movie_star.mp4",
             "img": "../../ilovelucy.png"
