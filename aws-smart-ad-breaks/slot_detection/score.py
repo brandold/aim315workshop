@@ -62,7 +62,8 @@ def calculate_scores(slots, media_info, asset_metadata):
         post_labels = set(label["Name"] for label in slot["Context"]["Labels"]["After"])
         if pre_labels or post_labels:
             distance = 1.0 - (len(pre_labels.intersection(post_labels)) / len(pre_labels.union(post_labels)))
-            slot["Score"] = __disjunction(slot["Score"], math.pow(distance, 4.0))
+            if distance < 1.0:
+                slot["Score"] = __disjunction(slot["Score"], math.pow(distance, 4.0))
 
         consolidated.append(slot)
         prev_slot = slot
